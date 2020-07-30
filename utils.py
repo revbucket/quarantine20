@@ -38,6 +38,26 @@ def mean(iterable, lambda_=None):
     return runsum / float(count)
     
 
+def mergesum(dicts):
+    """ Given a list/iterable of (nested) dicts, will merge them together 
+        where merge at the base level means summing values for shared keys 
+    """
+    def looper(iter_input, output=None):
+        if all(isinstance(_, (float, int)) for _ in iter_input):
+            return sum(iter_input)
+        # Collect by shared keys:
+        shared_keys = {}
+        for el in iter_input:
+            for k,v in el.items():
+                if k not in shared_keys:
+                    shared_keys[k] = []
+                shared_keys[k].append(v)
+
+        return {k: looper(v) for k, v in shared_keys.items()}
+    return looper(dicts)
+
+
+
 ### Plotting helpers
 
 def c(i):

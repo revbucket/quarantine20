@@ -7,7 +7,7 @@
 import networkx as nx
 import matplotlib.pyplot as plt
 import numpy as np
-import EoN
+import EoNlocal as EoN # Locally modified version of EoN
 import time
 import seaborn as sns
 import utils as utils
@@ -59,6 +59,9 @@ class TupleSIR:
             r_lists.append(running_r + tup.R)
 
             # add end-time-arrays
+            if tup.tmax == 0:
+                continue
+
             t_lists.append(np.array([tup.tmax + running_t]))
             s_lists.append(np.array([tup.S[-1]]))
             i_lists.append(np.array([tup.I[-1]]))
@@ -77,6 +80,18 @@ class TupleSIR:
 
         return TupleSIR(final_t, final_s, final_i, final_r, tmax=running_t)
 
+    @classmethod
+    def from_dict(cls, data_dict):
+        tmax = data_dict.get('tmax', data_dict['t'][-1])
+        return cls(data_dict['t'], data_dict['S'], data_dict['I'], 
+                   data_dict['R'], tmax=tmax)
+
+    def to_dict(self):
+        return {'t': self.t, 
+                'S': self.S, 
+                'I': self.I, 
+                'R': self.R, 
+                'tmax': self.tmax}
     # ======  End of TupleSIR Constructors                      =======
 
 
@@ -179,7 +194,20 @@ def run_until_prop_IR(G, tau, gamma, rho, tmax, prop, total_nodes=None):
     threshold = total_nodes * prop
     # This has to be slower because we need to run the infection 
     # and then figure out which time to cut things off (ex-post facto)
-    summary = EoN.fast_SIR(G, tau, gamma, rho=rho, tmax=tmax, return_full_data=True)
+    try:
+        # IF USING MATT'S HACKED/FASTER VERSION OF EoN
+        summary = EoN.fast_SIR(G, tau, gamma, rho=rho, tmax=tmax, return_full_data=True,
+                               term_IR=threshold)
+        breaktime = summary.t()[-1]
+        summary_dict = utils.invert_dict(summary.get_statuses(time=breaktime))        
+        G = G.copy() 
+        G.remove_nodes_from(summary_dict.get('I', []))
+        G.remove_nodes_from(summary_dict.get('R', []))
+        return G, TupleSIR.from_summary(summary)
+    except Exception as err:
+        print("EXCEPTION", err)
+        print("^Probably not using the local EoN")
+
 
     I, R = summary.I(), summary.R() 
     breakpoint = None
@@ -277,16 +305,22 @@ def quarantine_by_prop(G, tau, gamma, rho, prop_list, tmax, num_iter=1):
 
 
 
-SERIES_IDX = {'S': 1, 'I': 2, 'R': 3}
-def plot_vanilla_run(G, tau, gamma, rho, tmax, series='IR'):
+SERIES_IDX = {'S': 1, 'I': 2, 'R': 3, 'Z': 2}
+def plot_vanilla_run(G, tau, gamma, rho, tmax, series='IR', num_iter=5):
     axlist = []
     for serie in series: 
         fig, ax = plt.subplots(figsize=(8,8))
-
-        select = lambda tup: tup[SERIES_IDX[serie]]
-        for i in range(5):
+        for i in range(num_iter):
             runtup = EoN.fast_SIR(G, tau, gamma, rho=rho, tmax=tmax)
-            ax.plot(runtup[0], select(runtup), c='k', alpha=0.3)
+            if serie == 'Z':
+                ax.plot(runtup[0], [sum(_)for _ in zip(runtup[SERIES_IDX['I']],
+                                                       runtup[SERIES_IDX['R']])],
+                        c='k', alpha=0.3)
+            else:
+                ax.plot(runtup[0], runtup[SERIES_IDX[serie]], c='k', alpha=0.3)
+        ax.set_xlabel('Time')
+        ax.set_ylabel('# %s' % serie)
+        ax.set_title('%s vs time' % serie)
         axlist.append(ax)
     if len(axlist) > 1:
         return axlist
@@ -357,7 +391,7 @@ def get_quarantine_grid_data_props(G, tau, gamma, rho, tmax, first_proprange,
     prop_pairs = [[p0, p1] for p0 in first_proprange for p1 in second_proprange]
     output_data = {} 
     for p0, p1 in prop_pairs:
-        print("Quarantine @ props p=%s,%s", (p0, p1))
+        print("Quarantine @ props p=%s,%s" % (p0, p1))
         output_data[(p0, p1)] = quarantine_by_prop(G, tau, gamma, rho, 
                                                    [p0, p1], tmax, 
                                                    num_iter=num_iter)
@@ -391,14 +425,19 @@ def process_into_grid(data_dict, func=None):
 
 
 
-def heatmapify(grid, grid_idxs, title=None):
+def heatmapify(grid, grid_idxs, axlabels='time', title=None):
     """ Builds a heatmap and formats it (except for the title) """
+    assert axlabels in ['time', 'prop']
     fig, ax = plt.subplots(figsize=(10, 10))
     sns.heatmap(grid, ax=ax)
     yticks = [_[0][0] for _ in grid_idxs]
     xticks = [_[1] for _ in grid_idxs[0]]
-    ax.set_ylabel("Time of first quarantine")
-    ax.set_xlabel("Time of second quarantine (after first)")
+    if axlabels == 'time':
+        ax.set_ylabel("Time of first quarantine")
+        ax.set_xlabel("Time of second quarantine (after first)")
+    else:
+        ax.set_ylabel('Proportion of IR at Q1')
+        ax.set_xlabel('Proportion of IR at Q2')
     ax.set_yticklabels(yticks)
     ax.set_xticklabels(xticks)
     if title is not None:
@@ -413,5 +452,61 @@ def heatmapify(grid, grid_idxs, title=None):
 """ Second/cleaner attempt at quantifying how degrees change after
     each quarantine 
 """
+class DegreeXDict:
+    def __init__(self, degree_x):
+        self.degree_x = degree_x
 
+    @classmethod
+    def from_start_end(cls, start_G, end_G):
+        """ Method to get data dicts: 
+        ARGS:   
+            start_G: graph before running SIR-quarantine 
+            end_G: graph after running SIR-quarantine 
+        RETURNS:         
+            dict like {d: {'original': num,
+                           'final': num,
+                           N_i: num}, ...}
+        Where d := degree at start-graph
+               'original' -> number of nodes with degree d at start 
+               'final' -> number of nodes that started with degree d 
+                          that haven't been infected by end
+                N_i -> int that points to how many nodes of degree d end up 
+                       with degree d_i 
+        """
+        # Helper setups
+        invert_start = utils.invert_dict(dict(start_G.degree)) # deg -> list of nodes
+        end_degree = dict(end_G.degree) # node -> degree of that node 
+
+        # Make output dict and loop over start-degrees
+        output_dict = {}
+
+        for start_deg, node_list in invert_start.items():
+            saved_nodes = {node: end_degree[node] for node in node_list
+                           if node in end_degree}
+            key_dict = {'original': len(node_list),
+                        'final': len(saved_nodes)}
+            invert_end = {k: len(v) for k,v in utils.invert_dict(saved_nodes).items()}
+            key_dict.update(invert_end)
+            output_dict[start_deg] = key_dict
+
+        return cls(output_dict)
+
+    @classmethod
+    def from_start_ends(cls, start_G, end_Gs):
+        instances = [cls.from_start_end(start_G, _) for _ in end_Gs]
+        return cls.merge(instances)
+
+
+    @classmethod 
+    def merge(cls, instances):
+        return cls(utils.mergesum([_.degree_x for _ in instances]))
+
+
+    def percent_survived(self):
+        """ Returns a dict mapping start_degree-> %-susceptible after running
+            For each dict, this is final / original
+        """
+
+        op = lambda d: d['final'] / d['original']
+        return {k: op(v) for k,v in self.degree_x.items()}
 
