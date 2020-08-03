@@ -40,6 +40,15 @@ DATABASE : quarantine20
 		epidemic_id : id of epidemic used 
 
 
+	vanilla_runs:
+		graph_id: id of graph used 
+		epidemic_id: id of epidemic used 
+		num_runs: int - number of runs 
+		final_Rs: int[] - list of ints with final recovered numbers
+		max_Is: int[] - list of ints with maximum number of infected nodes 
+		full_data: AggregateTuple - pickled aggregateTuple method
+
+
 """
 
 
@@ -61,22 +70,43 @@ def insert_ba_graph(client, N, m):
 		   'N': N, 
 		   'params': {'m': m}, 
 		   'seed': seed}
-	return collection.insert_one(doc)
+	return collection.insert(doc)
+
+def insert_plc_graph(client, N, m, p):
+	collection = client[DATABASE_NAME].graphs 
+	seed = random.randint(1, 2 ** 20) 
+	doc = {'process': 'powerlaw_cluster', 
+	       'N': N, 
+	       'params': {'m': m, 'p': p},
+	       'seed': seed}	       
+	return collection.insert(doc)
+
 
 def recreate_graph(client, graph_id):
 	doc = client[DATABASE_NAME].graphs.find_one(ObjectId(graph_id))
 	if doc['process'] == 'barabasi_albert':
 		graph = nx.barabasi_albert_graph(doc['N'], doc['params']['m'], 
 										 seed=doc['seed'])
-		graph.graph_id = doc['_id']
+	elif doc['process'] == 'powerlaw_cluster':
+		graph = nx.powerlaw_cluster_graph(doc['N'], doc['params']['m'], 
+										  doc['params']['p'], 
+										  seed=doc['seed'])
 	else:
 		raise NotImplementedError
+
+	graph.graph_id = doc['_id']
 	return graph
 
 
 def insert_epidemic_params(client, tau, gamma, rho, name=None):
 	collection = client[DATABASE_NAME].epidemics
 	doc = {'tau': tau, 'gamma': gamma, 'rho': rho}
+
+	# First check to see if epidemic params exist: 
+	checkdoc = collection.find_one({'tau': tau, 'gamma': gamma, 'rho': rho})
+	if checkdoc is not None:
+		return checkdoc['_id']
+
 	if name is not None:
 		doc['name'] = name
 	return collection.insert(doc)
@@ -189,7 +219,7 @@ def populate_percent_survived_by_time(client, graph_id, epidemic_id,
 
 		if stop_time is not None:
 			out_G = Q.run_until_time(G, **epidemic_params, tmax=stop_time)[0]
-			base_dict['stop_time'] = stop_time
+			base_dict['stop_time'] = stop_time[0]
 		else:
 			assert stop_prop is not None 
 			out_G = Q.run_until_prop_IR(G, **epidemic_params, tmax=float('inf'), 
@@ -213,3 +243,27 @@ def populate_percent_survived_by_time(client, graph_id, epidemic_id,
 			for p in prop_ranges:
 				doc = doc_maker(G, stop_prop=p, which_iter=which_iter)
 				collection.insert_one(doc)
+
+
+
+
+def populate_vanilla_runs(client, graph_id, epidemic_id, num_runs):
+	graph = recreate_graph(client, graph_id)
+	epidemic_params = collect_epidemic_params(client, epidemic_id)
+	collection = client[DATABASE_NAME]['vanilla_runs']
+	runs = [Q.run_until_time(graph, **epidemic_params, tmax=float('inf'))[1] 
+			for _ in range(num_runs)]
+
+	max_Is = [_.get_max_I().item() for _ in runs]
+	final_Rs = [_.get_final_R().item() for _ in runs]
+	agg_tup = Q.AggregateTuple(runs)
+
+	doc = {'graph_id': ObjectId(graph_id), 
+	   	   'epidemic_id': ObjectId(epidemic_id),
+	   	   'num_runs': num_runs, 
+	   	   'max_Is': max_Is,
+	   	   'final_Rs': final_Rs, 
+	   	   'full_data': agg_tup.to_binary()}
+	return collection.insert(doc)
+
+
