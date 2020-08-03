@@ -11,6 +11,8 @@ import EoNlocal as EoN # Locally modified version of EoN
 import time
 import seaborn as sns
 import utils as utils
+import pickle 
+from bson.binary import Binary
 
 # =====================================================================
 # =           OUTPUT DATA STRUCTURE                                   =
@@ -124,6 +126,13 @@ class AggregateTuple:
     def __init__(self, tup_list):
         """ Placeholder class to hold/access lists of TupleSIR objects """
         self.tup_list = tup_list 
+
+    @classmethod
+    def from_binary(cls, binary_obj):
+        return cls(pickle.loads(binary_obj))
+
+    def to_binary(self):
+        return Binary(pickle.dumps([_.to_dict() for _ in self.tup_list]))
 
     def __getitem__(self, i):
         return self.tup_list[i]
@@ -509,4 +518,26 @@ class DegreeXDict:
 
         op = lambda d: d['final'] / d['original']
         return {k: op(v) for k,v in self.degree_x.items()}
+
+
+    def avg_degrees(self):
+        def op(v):
+            # Computes average degree of nodes that remain 
+            # (nodes that are removed (aka in IR) are not counted here
+            num_nodes = v['final']
+            if num_nodes == 0:
+                return 0
+            runsum = 0
+            for key, subv in v.items():
+                if key in ['final', 'original']:
+                    continue 
+                runsum += subv * key
+            return runsum / num_nodes
+
+        return {k: op(v) for k,v in self.degree_x.items()}
+
+    def avg_degree_drop_percent(self):
+        return {k: 1 - v /k for k,v in self.avg_degrees().items()}
+
+
 
