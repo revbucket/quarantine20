@@ -17,7 +17,7 @@ DATABASE : quarantine20
 		rho:    float - params for initializing an infection
 		name : str - shorthand helper?
 
-	quarantine_by_props:
+2	quarantine_by_props:
 		graph_id : id of graph used 
 		epidemic_id : id of epidemic used 
 		quarantine_props : float[] - floats of when the quarantine was run 
@@ -193,7 +193,7 @@ def populate_percent_survived_by_time(client, graph_id, epidemic_id,
 		else:
 			assert stop_prop is not None 
 			out_G = Q.run_until_prop_IR(G, **epidemic_params, tmax=float('inf'), 
-										prop=stop_prop)
+										prop=stop_prop)[0]
 			base_dict['stop_prop'] = stop_prop
 		degree_dict = Q.DegreeXDict.from_start_end(G, out_G)
 		out_dict = {} 
@@ -212,4 +212,4 @@ def populate_percent_survived_by_time(client, graph_id, epidemic_id,
 		if prop_ranges is not None:
 			for p in prop_ranges:
 				doc = doc_maker(G, stop_prop=p, which_iter=which_iter)
-				collection.which_iter(doc)
+				collection.insert_one(doc)
