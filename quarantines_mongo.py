@@ -17,7 +17,7 @@ DATABASE : quarantine20
 		rho:    float - params for initializing an infection
 		name : str - shorthand helper?
 
-	quarantine_by_props:
+2	quarantine_by_props:
 		graph_id : id of graph used 
 		epidemic_id : id of epidemic used 
 		quarantine_props : float[] - floats of when the quarantine was run 
@@ -253,6 +253,7 @@ def populate_percent_survived_by_time(client, graph_id, epidemic_id,
 			for p in prop_ranges:
 				doc = doc_maker(G, stop_prop=p, which_iter=which_iter)
 				collection.insert_one(doc)
+
 
 
 
