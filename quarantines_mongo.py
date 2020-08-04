@@ -49,6 +49,16 @@ DATABASE : quarantine20
 		full_data: AggregateTuple - pickled aggregateTuple method
 
 
+	plc_qtines:
+		graph_id: id of graph used 
+		epidemic_id: id of epidemic used 
+		num_runs: int - number of trials 
+		num_qtines: int - number of quarantines performed 
+		qtine_strat: str - either 'prop' or 'time'
+		qtine_data: float[] - list of when quarantines were applied 
+		final_Rs: int[] - list of ints with final recovered numbers 
+		max_Is: int[] - list of ints with max infected numbers
+
 """
 
 
@@ -264,5 +274,32 @@ def populate_vanilla_runs(client, graph_id, epidemic_id, num_runs):
 	   	   'final_Rs': final_Rs, 
 	   	   'full_data': agg_tup.to_binary()}
 	return collection.insert(doc)
+
+
+def populate_plc_qtines(client, graph_id, epidemic_id, num_runs, qtine_props):
+	if not isinstance(qtine_props, list):
+		qtine_props = [qtine_props]
+
+	graph = recreate_graph(client, graph_id)
+	epidemic_params = collect_epidemic_params(client, epidemic_id)
+	collection = client[DATABASE_NAME]['plc_qtines']
+	agg_tup = Q.quarantine_by_prop(graph, **epidemic_params, prop_list=qtine_props, 
+								   tmax=float('inf'), num_iter=num_runs)
+	max_Is = [_.get_max_I().item() for _ in agg_tup.tup_list]
+	final_Rs = [_.get_final_R().item() for _ in agg_tup.tup_list]
+	doc = {'graph_id': ObjectId(graph_id), 
+		   'epidemic_id': ObjectId(epidemic_id), 
+		   'num_runs': num_runs, 
+		   'num_qtines': len(qtine_props), 
+		   'qtine_strat': 'prop',
+		   'qtine_data': qtine_props, 
+		   'final_Rs': final_Rs, 
+		   'max_Is': max_Is}
+	return collection.insert(doc)
+
+
+
+if __name__ == '__main__':
+	main()
 
 
