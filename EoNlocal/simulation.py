@@ -1926,7 +1926,7 @@ def _trans_and_rec_time_Markovian_const_trans_(node, sus_neighbors, tau, rec_rat
 def fast_SIR(G, tau, gamma, initial_infecteds = None, initial_recovereds = None, 
                 rho = None, tmin = 0, tmax=float('Inf'), transmission_weight = None, 
                 recovery_weight = None, return_full_data = False, sim_kwargs = None,
-                term_IR=None):
+                term_IR=None, term_I=None):
     r'''
     fast SIR simulation for exponentially distributed infection and 
     recovery times
@@ -2052,7 +2052,8 @@ def fast_SIR(G, tau, gamma, initial_infecteds = None, initial_recovereds = None,
                         initial_recovereds = initial_recovereds, 
                         rho=rho, tmin = tmin, tmax = tmax, 
                         return_full_data = return_full_data, 
-                        sim_kwargs=sim_kwargs, term_IR=term_IR)
+                        sim_kwargs=sim_kwargs, term_IR=term_IR, 
+                        term_I=term_I)
     else:
         #the transmission rate is tau for all edges.  We can use this
         #to speed up the code.
@@ -2069,7 +2070,8 @@ def fast_SIR(G, tau, gamma, initial_infecteds = None, initial_recovereds = None,
                         initial_recovereds = initial_recovereds, 
                         rho=rho, tmin = tmin, tmax = tmax, 
                         return_full_data = return_full_data, 
-                        sim_kwargs=sim_kwargs, term_IR=term_IR)
+                        sim_kwargs=sim_kwargs, term_IR=term_IR,
+                        term_I=term_I)
 
 
 
@@ -2083,7 +2085,7 @@ def fast_nonMarkov_SIR(G, trans_time_fxn=None,
                         initial_recovereds = None,
                         rho=None, tmin = 0, tmax = float('Inf'), 
                         return_full_data = False, sim_kwargs = None,
-                        term_IR=None):
+                        term_IR=None, term_I=None):
     r'''
     A modification of the algorithm in figure A.3 of Kiss, Miller, & 
     Simon to allow for user-defined rules governing time of 
@@ -2312,6 +2314,8 @@ def fast_nonMarkov_SIR(G, trans_time_fxn=None,
         Q.pop_and_run()
         if term_IR is not None and (I[-1] + R[-1]) >= term_IR:
             break
+        if term_I is not None and I[-1] >= term_I:
+            break 
 
     #the initial infections were treated as ordinary infection events at 
     #time 0.
