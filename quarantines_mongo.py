@@ -70,30 +70,42 @@ import networkx as nx
 import random
 import pickle
 DATABASE_NAME = 'quarantine20'
+DB2 = 'quarantine20_v2'
 
-# HELPERS: 
+# HELPERS:
 
-def insert_ba_graph(client, N, m):
-	collection = client[DATABASE_NAME].graphs 
+
+# ============================================================================
+# =           GRAPH INSERTION + RECREATION FUNCTIONS                         =
+# ============================================================================
+
+
+
+def insert_ba_graph(db, N, m, name=None):
+	collection = db.graphs 
 	seed = random.randint(1, 2 ** 20)
 	doc = {'process': 'barabasi_albert', 
 		   'N': N, 
 		   'params': {'m': m}, 
 		   'seed': seed}
+	if name is not None:
+		doc['name'] = name	
 	return collection.insert(doc)
 
-def insert_plc_graph(client, N, m, p):
-	collection = client[DATABASE_NAME].graphs 
+def insert_plc_graph(db, N, m, p, name=None):
+	collection = db.graphs 
 	seed = random.randint(1, 2 ** 20) 
 	doc = {'process': 'powerlaw_cluster', 
 	       'N': N, 
 	       'params': {'m': m, 'p': p},
-	       'seed': seed}	       
+	       'seed': seed}	
+	if name is not None:
+		doc['name'] = name	          
 	return collection.insert(doc)
 
 
-def recreate_graph(client, graph_id):
-	doc = client[DATABASE_NAME].graphs.find_one(ObjectId(graph_id))
+def recreate_graph(db, graph_id):
+	doc = db.graphs.find_one(ObjectId(graph_id))
 	if doc['process'] == 'barabasi_albert':
 		graph = nx.barabasi_albert_graph(doc['N'], doc['params']['m'], 
 										 seed=doc['seed'])
@@ -108,8 +120,15 @@ def recreate_graph(client, graph_id):
 	return graph
 
 
-def insert_epidemic_params(client, tau, gamma, rho, name=None):
-	collection = client[DATABASE_NAME].epidemics
+# ==============================================================================
+# =           EPIDEMIC INSERTION + RECREATION FUNCTIONS                        =
+# ==============================================================================
+
+
+
+
+def insert_epidemic_params(db, tau, gamma, rho, name=None):
+	collection = db.epidemics
 	doc = {'tau': tau, 'gamma': gamma, 'rho': rho}
 
 	# First check to see if epidemic params exist: 
@@ -121,18 +140,22 @@ def insert_epidemic_params(client, tau, gamma, rho, name=None):
 		doc['name'] = name
 	return collection.insert(doc)
 
-def collect_epidemic_params(client, epidemic_id):
-	doc = client[DATABASE_NAME].epidemics.find_one(ObjectId(epidemic_id))
+def collect_epidemic_params(db, epidemic_id):
+	doc = db.epidemics.find_one(ObjectId(epidemic_id))
 	return {k: doc[k] for k in ['tau', 'gamma', 'rho'] if k in doc}
 
 
-# Populate quarantines:
+# ===========================================================================
+# =           RUN SINGLE QUARANTINE STRAT                                   =
+# ===========================================================================
+
 
 def quarantine_by_prop_doc(graph, epidemic_id, epidemic_params, prop_list,
-						   which_iter):
+						   which_iter, name=None):
+	# Runs the single SIR run, outputs the document but doesn't insert 
 	# Get the python output objects
 	tup = Q.quarantine_by_prop(graph, **epidemic_params, tmax=float('inf'),
- 						       prop_list=prop_list, num_iter=1)
+ 						       prop_list=prop_list, num_iter=1, return_summary=False)
 
 	# Process into mongo insert objects 
 	output_doc = {'graph_id': graph.graph_id,
@@ -142,6 +165,8 @@ def quarantine_by_prop_doc(graph, epidemic_id, epidemic_params, prop_list,
 				  'final_R': tup.get_final_R().item(), 
 				  'max_I': tup.get_max_I().item(), 
 				  'full_data': Binary(pickle.dumps(tup.to_dict()))}
+	if name is not None:
+		output_doc['name'] = name
 
 	return output_doc
 
@@ -161,29 +186,45 @@ def quarantine_by_time_doc(graph, epidemic_id, epidemic_params, time_list,
 	return output_doc
 
 
-def populate_quarantine_by_prop(client, graph_id, epidemic_id, 
-								prop_range, iter_num):
-	graph = recreate_graph(client, graph_id)
-	epidemic_params = collect_epidemic_params(client, epidemic_id)
-	collection = client[DATABASE_NAME]['quarantine_by_props']
+def populate_quarantine_by_prop(db, graph_id, epidemic_id, 
+								prop_range, iter_num, save_full_data=True, 
+								name=None):
+	graph = recreate_graph(db, graph_id)
+	epidemic_params = collect_epidemic_params(db, epidemic_id)
+	collection = db['quarantine_by_props']
+	total_runs = len(prop_range) * iter_num
+	#TOTAL RUNS = 
+	i = 0
 	for prop_list in prop_range:
 		for which_iter in range(iter_num):
+			print(i, total_runs)
+			i += 1
 			doc = quarantine_by_prop_doc(graph, epidemic_id, 
 										 epidemic_params, prop_list,
-									     which_iter)
+									     which_iter, name=name)
+			if not save_full_data:
+				del doc['full_data']
 			collection.insert_one(doc)
 
-def populate_quarantine_by_time(client, graph_id, epidemic_id, time_range, 
+
+def populate_quarantine_by_time(db, graph_id, epidemic_id, time_range, 
 								iter_num):
-	graph = recreate_graph(client, graph_id)
-	epidemic_params = collect_epidemic_params(client, epidemic_id)
-	collection = client[DATABASE_NAME]['quarantine_by_times']
+	graph = recreate_graph(db, graph_id)
+	epidemic_params = collect_epidemic_params(db, epidemic_id)
+	collection = db['quarantine_by_times']
 	for time_list in time_range:
 		for which_iter in range(iter_num):
 			doc = quarantine_by_time_doc(graph, epidemic_id, 
 										 epidemic_params, time_list,
 									     which_iter)
 			collection.insert_one(doc)
+
+
+# ===========================================================================
+# =           SERIES RUNNERS                                                =
+# ===========================================================================
+
+
 
 
 
@@ -298,6 +339,46 @@ def populate_plc_qtines(client, graph_id, epidemic_id, num_runs, qtine_props):
 		   'max_Is': max_Is}
 	return collection.insert(doc)
 
+
+# ====================================================================
+# =           Single Quarantine Readers/Plotters                     =
+# ====================================================================
+
+def group_by_qprop(db, name):
+    """
+    Collects from db.quarantine_by_prop all nodes with the given name
+    and builds a doc like 
+    {qprop: {max_I: [maxI_1, maxI_2, ...],
+             final_R}}
+    """
+    # and builds a doc like 
+    collection = db['quarantine_by_props']
+    docs = collection.find({'name': name}, projection=['graph_id', 'quarantine_props', 'iter_num', 'final_R', 'max_I'])
+    outdoc = {} 
+    N = None 
+    for doc in docs:
+        if N is None:
+            N = db.graphs.find_one(doc['graph_id'])['N']
+        if doc['quarantine_props'] not in outdoc:
+            outdoc[doc['quarantine_props']] = {'max_I': [], 'final_R': []}
+        subdoc = outdoc[doc['quarantine_props']]
+        subdoc['max_I'].append(doc['max_I'] / N)
+        subdoc['final_R'].append(doc['final_R'] / N)
+    return outdoc 
+
+    
+def gather_by_qprop(groups, i_or_r):
+    assert i_or_r in ['I', 'R']
+    triples = [] # will have (qprop, mean, stdev) sorted according to qprop 
+    def getter(doc):
+        if i_or_r == 'I':
+            return doc['max_I']
+        return doc['final_R']
+    
+    for qprop, subdoc in groups.items(): 
+        sublist = getter(subdoc)
+        triples.append((qprop, np.mean(sublist), np.std(sublist)))
+    return sorted(triples, key=lambda t: t[0])
 
 
 if __name__ == '__main__':

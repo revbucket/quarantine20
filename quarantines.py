@@ -184,11 +184,11 @@ def run_until_time(G, tau, gamma, rho, tmax):
     G = G.copy() 
     G.remove_nodes_from(I_nodes)
     G.remove_nodes_from(R_nodes)
-    return G, TupleSIR.from_summary(summary, tmax=tmax)
+    return G, TupleSIR.from_summary(summary, tmax=tmax), summary
 
 
 def run_until_prop_IR(G, tau, gamma, rho, tmax, prop, total_nodes=None,
-                      term_I=False):
+                      term_I=False, return_summary=True):
     """
     Runs SIR model until prop (in [0,1]) fraction of nodes are in I+R states 
     If total_nodes is not None, then the proportion is WRT total_nodes (and not len(G))
@@ -199,7 +199,12 @@ def run_until_prop_IR(G, tau, gamma, rho, tmax, prop, total_nodes=None,
     """
 
     if min([tmax, prop]) == 0:
-        return G, TupleSIR.empty()
+        if return_summary:
+            empty_summary = EoN.fast_SIR(G, tau, gamma, rho=0, tmax=0, return_full_data=True)
+
+            return G, TupleSIR.empty(), empty_summary
+        else:
+            return G, TupleSIR.empty()
 
     total_nodes = total_nodes or len(G)
     re_init_count = rho * total_nodes / len(G)
@@ -218,7 +223,10 @@ def run_until_prop_IR(G, tau, gamma, rho, tmax, prop, total_nodes=None,
         G = G.copy() 
         G.remove_nodes_from(summary_dict.get('I', []))
         G.remove_nodes_from(summary_dict.get('R', []))
-        return G, TupleSIR.from_summary(summary)
+        if return_summary:
+            return G, TupleSIR.from_summary(summary), summary
+        else:
+            return G, TupleSIR.from_summary(summary)
     except Exception as err:
         print("EXCEPTION", err)
         print("^Probably not using the local EoN")
@@ -288,7 +296,7 @@ def quarantines_by_time(G, tau, gamma, rho, qtimes, tmax, num_iter=1):
 
 
 def quarantine_by_prop(G, tau, gamma, rho, prop_list, tmax, num_iter=1,
-                       term_I=False):
+                       term_I=False, return_summary=False):
     # SINGLE QUARANTINE ONLY!!!
     # Runs a single quarantine which is initialized when the proportion I,R gets to prop
     # and then runs until tmax afterwards
@@ -297,6 +305,7 @@ def quarantine_by_prop(G, tau, gamma, rho, prop_list, tmax, num_iter=1,
         prop_list = [prop_list]
 
     outputs = [] 
+    summaries = []
     original_G = G
     cured = False
     for iter_num in range(num_iter):
@@ -305,24 +314,39 @@ def quarantine_by_prop(G, tau, gamma, rho, prop_list, tmax, num_iter=1,
         tups = [] 
         remaining_time = tmax
         for prop in prop_list:
-            G, tup = run_until_prop_IR(G, tau, gamma, rho, remaining_time, 
+            if prop == 0:
+                continue
+            prop_out = run_until_prop_IR(G, tau, gamma, rho, remaining_time, 
                                        prop, total_nodes=len(original_G),
-                                       term_I=term_I)
+                                       term_I=term_I, return_summary=return_summary)
+            if not return_summary:
+                G, tup = prop_out 
+            else:
+                G, tup, summary = prop_out
+                summaries.append(summary)
+
             count += 1
             remaining_time -= tup.tmax
-            tups.append(tup)            
+            tups.append(tup) 
             if tup.I[-1] == 0: 
                 cured = True
                 break
+
         if remaining_time > 0.0 and not cured:
-            tups.append(run_until_time(G, tau, gamma, rho, remaining_time)[1])
+            run_until_time_out = run_until_time(G, tau, gamma, rho, remaining_time)
+            tups.append(run_until_time_out[1])
+            summaries.append(run_until_time_out[-1])
             count +=1
         outputs.append(TupleSIR.cat(tups))
         outputs[-1].count = count
 
     if len(outputs) == 1:
-        return outputs[0] 
+        if return_summary:
+            return outputs[0], summaries
+        return outputs[0]
     else:
+        if return_summary:
+            return AggregateTuple(outputs), summaries
         return AggregateTuple(outputs)
 
 
