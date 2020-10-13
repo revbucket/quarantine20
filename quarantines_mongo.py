@@ -205,7 +205,7 @@ def quarantine_by_prop_doc(graph, epidemic_id, epidemic_params, prop_list,
  						       prop_list=prop_list, num_iter=1, return_summary=False)
 
 	# Process into mongo insert objects 
-	output_doc = {'graph_id': graph.graph_id,
+	output_doc = {'graph_id': getattr(graph, 'graph_id', None),
 				  'epidemic_id': epidemic_id,
 				  'quarantine_props': prop_list, 
 				  'iter_num': which_iter, 
@@ -235,8 +235,8 @@ def quarantine_by_time_doc(graph, epidemic_id, epidemic_params, time_list,
 
 def populate_quarantine_by_prop(db, graph_id, epidemic_id, 
 								prop_range, iter_num, save_full_data=True, 
-								name=None):
-	graph = recreate_graph(db, graph_id)
+								name=None, graph=None):
+	graph = graph or recreate_graph(db, graph_id)
 	epidemic_params = collect_epidemic_params(db, epidemic_id)
 	collection = db['quarantine_by_props']
 	total_runs = len(prop_range) * iter_num

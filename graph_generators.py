@@ -293,7 +293,7 @@ def load_highschool(minutes, scale=1):
         raise NotImplementedError("Need to scale up according to LFR Networkit")
 
 ARXIV_COLLAB_ARGS = ['AstroPh', 'CondMat', 'HepPh', 'GrQc', 'HepTh']
-def load_arxiv_collabco(s):
+def load_arxiv_collab(s):
     assert s in ARXIV_COLLAB_ARGS
     return nx.read_adjlist(os.path.join(DIRNAME, 'snap/collab/ca-%s.txt' %s)) 
 
