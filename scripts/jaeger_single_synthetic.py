@@ -20,7 +20,7 @@ from pymongo import MongoClient
 
 import argparse 
 
-RESOLUTION =100
+RESOLUTION = 10
 
 def main(args):
 	name = args.name
@@ -47,6 +47,18 @@ def main(args):
 		m = int(graph_params[0])
 		p = float(graph_params[1])
 		graph_id = qm.insert_plc_graph(db, N, m, p, name=name)
+	elif graph_type == 'rw':
+		qe = float(graph_params[0])
+		qv = float(graph_params[1])
+		graph_id = qm.insert_rw_graph(db, N, qe, qv, name=name)
+	elif graph_type == 'nn':
+		u = float(graph_params[0])
+		k = int(graph_params[1])
+		graph_id = qm.insert_nn_graph(db, N, u, k, name=name)
+	elif graph_type == 'ws':
+		k = int(graph_params[0])
+		p = float(graph_params[1])
+		graph_id = qm.insert_ws_graph(db, N, k, p, name=name)
 	else:
 		raise NotImplementedError("Only BA/PLC graphs supported")
 
@@ -65,7 +77,8 @@ if __name__ == '__main__':
 
 	parser = argparse.ArgumentParser(description='Process some integers.')
 
-	parser.add_argument('-g', '--graph_type', dest='graph_type', type=str, choices=['ba', 'plc'], 
+	parser.add_argument('-g', '--graph_type', dest='graph_type', type=str, 
+						choices=['ba', 'plc', 'rw', 'nn', 'ws'], 
 		                required=True)
 	parser.add_argument('-N', '--N', dest='N', required=True)
 	parser.add_argument('-gparam', '--graph_params', dest='graph_params', nargs='+', required=True)

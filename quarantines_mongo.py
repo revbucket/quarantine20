@@ -66,7 +66,9 @@ from pymongo import MongoClient
 from bson.objectid import ObjectId
 from bson.binary import Binary
 import quarantines as Q 
+import graph_generators as gg
 import networkx as nx
+import numpy as np 
 import random
 import pickle
 DATABASE_NAME = 'quarantine20'
@@ -104,15 +106,60 @@ def insert_plc_graph(db, N, m, p, name=None):
 	return collection.insert(doc)
 
 
+def insert_rw_graph(db, N, qe, qv, name=None):
+	collection = db.graphs 
+	seed = random.randint(1, 2 ** 20) 
+	doc = {'process': 'random_walk',
+		   'N': N, 
+		   'params': {'qe': qe, 'qv': qv}, 
+		   'seed': seed}
+	if name is not None:
+		doc['name'] = name 
+
+	return collection.insert(doc) 
+
+def insert_nn_graph(db, N, u, k, name=None):
+	collection = db.graphs 
+	seed = random.randint(1, 2 ** 20) 
+	doc = {'process': 'nearest_neighbor', 
+	 	   'N': N, 
+	 	   'params': {'u': u, 'k': k}, 
+	 	   'seed': seed} 
+	if name is not None:
+		doc['name'] = name 
+
+	return collection.insert(doc) 
+
+
+def insert_ws_graph(db, N, k, p, name=None):
+	collection = db.graphs 
+	seed = random.randint(1, 2 ** 20)
+	doc = {'process': 'watts_strogatz', 
+	       'N': N, 
+	       'params': {'k': k, 'p': p}, 
+	       'seed': seed} 
+	if name is not None:
+		doc['name'] = name 
+
+	return collection.insert(doc) 
+
+
 def recreate_graph(db, graph_id):
 	doc = db.graphs.find_one(ObjectId(graph_id))
 	if doc['process'] == 'barabasi_albert':
-		graph = nx.barabasi_albert_graph(doc['N'], doc['params']['m'], 
-										 seed=doc['seed'])
+		graph = gg.ba_graph(doc['N'], doc['params']['m'], seed=doc['seed'])
 	elif doc['process'] == 'powerlaw_cluster':
-		graph = nx.powerlaw_cluster_graph(doc['N'], doc['params']['m'], 
-										  doc['params']['p'], 
-										  seed=doc['seed'])
+		graph = gg.plc_graph(doc['N'], doc['params']['m'], doc['params']['p'], 
+							 seed=doc['seed']) 
+	elif doc['process'] == 'random_walk':
+		graph = gg.random_walk_graph(doc['N'], doc['params']['qe'], 
+									 doc['params']['qv'], seed=doc['seed'])
+	elif doc['process'] == 'nearest_neighbor':
+		graph = gg.nearestNeighbor_mod(doc['N'], doc['params']['u'], doc['params']['k'], 
+									   seed=doc['seed'])
+	elif doc['process'] == 'watts_strogatz':
+		graph = gg.watts_strogatz_graph(doc['N'], doc['params']['k'], doc['params']['p'],
+									    seed=doc['seed'])
 	else:
 		raise NotImplementedError
 
