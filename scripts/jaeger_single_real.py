@@ -41,6 +41,15 @@ def main(args):
 	elif graph_type == 'arxiv':
 		graph = gg.load_arxiv_collab(graph_params)
 
+	elif graph_type == 'hiv':
+		graph = gg.load_hiv(int(graph_params))
+		return graph
+	elif graph_type == 'hs':
+		minutes = float(graph_params[0])
+		scale = int(graph_params[1])
+		graph = gg.load_highschool(minutes, scale=scale)
+		return graph
+
 	else:
 		raise NotImplementedError("Nope")
 	rho = float(args.init_infected / len(graph))
@@ -60,9 +69,10 @@ if __name__ == '__main__':
 	parser = argparse.ArgumentParser(description='Process some integers.')
 
 	parser.add_argument('-g', '--graph_type', dest='graph_type', type=str, 
-						choices=['gemsec_fb', 'gemsec_deezer', 'arxiv'], 
+						choices=['gemsec_fb', 'gemsec_deezer', 'arxiv', 'hiv', 'hs'], 
 		                required=True)
-	parser.add_argument('-gparam', '--graph_params', dest='graph_params', type=str, required=True)
+	parser.add_argument('-gparam', '--graph_params', dest='graph_params', type=str, 
+					     							 nargs='+', required=True)
 	parser.add_argument('-tau', '--tau', dest='tau', type=float, required=False, default=0.1)
 	parser.add_argument('-gamma', '--gamma', dest='gamma', type=float, required=False, default=0.1)
 	parser.add_argument('-init', '--init_infected', dest='init_infected', type=int, required=False, default=10)
@@ -71,5 +81,5 @@ if __name__ == '__main__':
 
 
 	args = parser.parse_args()	
-	main(args)
+	output = main(args)
 

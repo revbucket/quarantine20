@@ -2,7 +2,7 @@
 
 
 import networkx as nx
-import networkit as nit
+import networkit as nk
 import random 
 import math 
 import os 
@@ -266,9 +266,23 @@ def load_gemsec_fb(s):
 
 
 GEMSEC_DEEZER_ARGS = ['RO', 'HR', 'HU']
+
 def load_gemsec_deezer(s):
     assert s in GEMSEC_DEEZER_ARGS
     return nx.read_adjlist(os.path.join(DIRNAME, 'snap/deezer_clean_data/%s_edges.csv' % s))
+
+
+def scale_up_graph(G, scale):
+    """ Takes in networkx graph, converts to nk, scales up by factor, 
+        converts back to networkx, and then collects only largest CC 
+    """
+    nk_graph = nk.nxadapter.nx2nk(G)
+    scaled_graph = nk.generators.LFRGenerator.fit(nk_graph, scale=scale).generate() 
+    G_scaled = nk.nxadapter.nk2nx(scaled_graph)
+    conn_comps = list(nx.connected_components(G_scaled))
+    largest_conn_comp = max(conn_comps, key=lambda d: len(d))
+    return G_scaled.subgraph(largest_conn_comp)    
+
 
 
 def load_highschool(minutes, scale=1):
@@ -276,7 +290,7 @@ def load_highschool(minutes, scale=1):
         (also scales up by networkit's scaling to given scale factor if > 1)
     """
     edges = {}
-    with open(os.path.join(DIRNAME, 'snap/highschool/sd02.txt', 'r')) as f:
+    with open(os.path.join(DIRNAME, 'snap/highschool/sd02.txt'), 'r') as f:
         for line in f.readlines():
             trip = (line.strip().split('\t'))
             pair = tuple(sorted([int(trip[0]), int(trip[1])]))
@@ -288,15 +302,21 @@ def load_highschool(minutes, scale=1):
     G.add_edges_from(edgelist)
 
     if scale == 1:
-        return G    
+        return G
     else:
-        raise NotImplementedError("Need to scale up according to LFR Networkit")
+        return scale_up_graph(G, scale)
+
+def load_hiv(scale=1):
+    G = nx.read_edgelist(os.path.join(DIRNAME, 'snap/hiv/potterat.edgelist'))
+    if scale == 1:
+        return G 
+    return scale_up_graph(G, scale)
+
 
 ARXIV_COLLAB_ARGS = ['AstroPh', 'CondMat', 'HepPh', 'GrQc', 'HepTh']
 def load_arxiv_collab(s):
     assert s in ARXIV_COLLAB_ARGS
     return nx.read_adjlist(os.path.join(DIRNAME, 'snap/collab/ca-%s.txt' %s)) 
-
 
 
 
