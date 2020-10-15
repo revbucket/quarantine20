@@ -21,6 +21,8 @@ def main(args):
 	# Parse graph params
 	graph_type = args.graph_type 
 	graph_params = args.graph_params
+	if len(graph_params) == 1:
+		graph_params = graph_params[0]
 	#Parse infection params
 	tau = float(args.tau )
 	gamma = float(args.gamma )
