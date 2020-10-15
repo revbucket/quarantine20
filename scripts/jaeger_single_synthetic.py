@@ -20,7 +20,7 @@ from pymongo import MongoClient
 
 import argparse 
 
-RESOLUTION = 10
+RESOLUTION = 100
 
 def main(args):
 	name = args.name
