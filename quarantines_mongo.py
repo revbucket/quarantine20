@@ -210,8 +210,11 @@ def quarantine_by_prop_doc(graph, epidemic_id, epidemic_params, prop_list,
 				  'quarantine_props': prop_list, 
 				  'iter_num': which_iter, 
 				  'final_R': tup.get_final_R().item(), 
-				  'max_I': tup.get_max_I().item(), 
+				  'max_I': tup.get_max_I().item(),
+				  'peak_widths': tup.get_all_peak_widths(),  
 				  'full_data': Binary(pickle.dumps(tup.to_dict()))}
+
+
 	if name is not None:
 		output_doc['name'] = name
 

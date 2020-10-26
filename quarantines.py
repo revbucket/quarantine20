@@ -121,6 +121,57 @@ class TupleSIR:
         ax.set_ylabel('# I + # R')
         ax.set_title("I+R vs Time")
 
+    def get_peak_width(self):
+        """ Gets the "width" of the peak (assuming this has a single peak)
+            by finding the peak I and considering the time-gap between 
+            the times the peak hits half-peak
+        """
+        peak_i_idx, peak_i = max(enumerate(self.I), key=lambda p: p[1])
+        halfpeak = peak_i / 2
+        # Get first time hitting half:
+        pre_idx = peak_i_idx
+        post_idx = peak_i_idx
+        while self.I[pre_idx] > halfpeak:
+            pre_idx -= 1
+
+        while self.I[post_idx] > halfpeak:
+            post_idx += 1
+
+        return self.t[post_idx] - self.t[pre_idx]
+
+
+    def get_all_peak_widths(self):
+        """ Gets a list of peak widths (in terms of time) """
+
+        # First find all the locally maximal indices 
+        # Very structured signal: 
+        # Can identify the indices when quarantine was applied 
+        quarantine_idxs = [] 
+        for i in range(len(self.I) - 1):
+            if self.I[i + 1] < self.I[i] - 1:
+                quarantine_idxs.append(i + 1)
+
+        qtine_slices = []
+        starts = [0] + quarantine_idxs
+        ends = quarantine_idxs + [len(self.I)]
+        qtine_slices = list(zip(starts, ends))
+
+        slice_widths = []
+        # And then get max and width of each slice 
+        for q_slice in qtine_slices:
+            max_pair = max(enumerate(self.I[q_slice[0]:q_slice[1]]), 
+                           key=lambda p: p[1])
+            half_max = max_pair[1] / 2
+            half_max_idxs = []
+            for i in range(q_slice[0], q_slice[1] -1 ):
+                if (self.I[i] -  half_max) * (self.I[i+1] - half_max) <= 0:
+                    half_max_idxs.append(i)
+            lo_t = self.t[half_max_idxs[0]]
+            hi_t = self.t[half_max_idxs[-1]]
+            slice_widths.append(hi_t - lo_t)
+        return slice_widths
+
+
 
 class AggregateTuple:
     def __init__(self, tup_list):
@@ -156,6 +207,34 @@ class AggregateTuple:
             ax.set_title(serie + ' by time')
             ax.legend() 
         
+
+
+    def gather_agg(self, plot_series='I'):
+        """ Returns a list of [(t, mean_I, std_I)] 
+            for either I or R series, where the T's are from the one that has 
+            the max (noninf) time 
+        """
+        def getter(tup):
+            if plot_series == 'I':
+                return self[idx].I
+            else:
+                return self[idx].R
+        max_t_idx = max(enumerate(self), key=lambda tup: tup[1].t[-2])[0]
+        ts = self[max_t_idx].t
+        # First collect into lists 
+        output = [] 
+        for t in ts: 
+            sublist = []
+            for tup in self:
+                els = tup.I if (plot_series == 'I') else tup.R 
+                sublist.append(utils.linear_interp(tup.t, els, t)) 
+            output.append(sublist) 
+        # Hm... maybe better to return the full list and then decide from there
+        return [(ts[i], _) for i, _ in enumerate(output)]
+        #return [(ts[i], np.mean(_), np.std(_)) for i, _ in enumerate(output)]
+
+
+
 
 
 # =========================================================================
@@ -307,6 +386,8 @@ def quarantine_by_prop(G, tau, gamma, rho, prop_list, tmax, num_iter=1,
     outputs = [] 
     summaries = []
     original_G = G
+    init_infect = round(rho * len(G))
+    new_rho = init_infect / len(G)
     cured = False
     for iter_num in range(num_iter):
         count = 0
@@ -316,7 +397,8 @@ def quarantine_by_prop(G, tau, gamma, rho, prop_list, tmax, num_iter=1,
         for prop in prop_list:
             if prop == 0:
                 continue
-            prop_out = run_until_prop_IR(G, tau, gamma, rho, remaining_time, 
+
+            prop_out = run_until_prop_IR(G, tau, gamma, new_rho, remaining_time, 
                                        prop, total_nodes=len(original_G),
                                        term_I=term_I, return_summary=return_summary)
             if not return_summary:
@@ -324,7 +406,7 @@ def quarantine_by_prop(G, tau, gamma, rho, prop_list, tmax, num_iter=1,
             else:
                 G, tup, summary = prop_out
                 summaries.append(summary)
-
+            new_rho = init_infect / len(G)
             count += 1
             remaining_time -= tup.tmax
             tups.append(tup) 
@@ -333,7 +415,7 @@ def quarantine_by_prop(G, tau, gamma, rho, prop_list, tmax, num_iter=1,
                 break
 
         if remaining_time > 0.0 and not cured:
-            run_until_time_out = run_until_time(G, tau, gamma, rho, remaining_time)
+            run_until_time_out = run_until_time(G, tau, gamma, new_rho, remaining_time)
             tups.append(run_until_time_out[1])
             summaries.append(run_until_time_out[-1])
             count +=1
@@ -345,7 +427,7 @@ def quarantine_by_prop(G, tau, gamma, rho, prop_list, tmax, num_iter=1,
             return outputs[0], summaries
         return outputs[0]
     else:
-        if return_summary:
+        if return_summary:  
             return AggregateTuple(outputs), summaries
         return AggregateTuple(outputs)
 
