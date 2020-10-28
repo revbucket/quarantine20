@@ -164,7 +164,7 @@ class TupleSIR:
             max_pair = max(enumerate(self.I[q_slice[0]:q_slice[1]]), 
                            key=lambda p: p[1])
             half_max = max_pair[1] / 2
-            slice_heights.append(max_pair[1])
+            slice_heights.append(float(max_pair[1]))
             half_max_idxs = []
             for i in range(q_slice[0], q_slice[1] -1 ):
                 if (self.I[i] -  half_max) * (self.I[i+1] - half_max) <= 0:
@@ -172,7 +172,7 @@ class TupleSIR:
             lo_t = self.t[half_max_idxs[0]]
             hi_t = self.t[half_max_idxs[-1]]
             slice_widths.append(hi_t - lo_t)
-        return slice_widths
+        return slice_widths, slice_heights
 
 
 
