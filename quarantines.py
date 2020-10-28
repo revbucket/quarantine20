@@ -121,6 +121,7 @@ class TupleSIR:
         ax.set_ylabel('# I + # R')
         ax.set_title("I+R vs Time")
 
+
     def get_peak_width(self):
         """ Gets the "width" of the peak (assuming this has a single peak)
             by finding the peak I and considering the time-gap between 
@@ -140,7 +141,7 @@ class TupleSIR:
         return self.t[post_idx] - self.t[pre_idx]
 
 
-    def get_all_peak_widths(self):
+    def get_all_peak_widths_heights(self):
         """ Gets a list of peak widths (in terms of time) """
 
         # First find all the locally maximal indices 
@@ -157,11 +158,13 @@ class TupleSIR:
         qtine_slices = list(zip(starts, ends))
 
         slice_widths = []
+        slice_heights = [] 
         # And then get max and width of each slice 
         for q_slice in qtine_slices:
             max_pair = max(enumerate(self.I[q_slice[0]:q_slice[1]]), 
                            key=lambda p: p[1])
             half_max = max_pair[1] / 2
+            slice_heights.append(max_pair[1])
             half_max_idxs = []
             for i in range(q_slice[0], q_slice[1] -1 ):
                 if (self.I[i] -  half_max) * (self.I[i+1] - half_max) <= 0:

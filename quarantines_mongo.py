@@ -205,13 +205,15 @@ def quarantine_by_prop_doc(graph, epidemic_id, epidemic_params, prop_list,
  						       prop_list=prop_list, num_iter=1, return_summary=False)
 
 	# Process into mongo insert objects 
+	widths, heights = tup.get_all_peak_widths()
 	output_doc = {'graph_id': getattr(graph, 'graph_id', None),
 				  'epidemic_id': epidemic_id,
 				  'quarantine_props': prop_list, 
 				  'iter_num': which_iter, 
 				  'final_R': tup.get_final_R().item(), 
 				  'max_I': tup.get_max_I().item(),
-				  'peak_widths': tup.get_all_peak_widths(),  
+				  'peak_widths': widths, 
+				  'peak_heights': heights,
 				  'full_data': Binary(pickle.dumps(tup.to_dict()))}
 
 

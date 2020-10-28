@@ -2,6 +2,11 @@
     - Generic helpers for iterables
     - Helpers for plotting things
 """
+import networkx as nx 
+from scipy import stats
+import random
+import numpy as np
+import matplotlib.colors as mcolors
 
 def selector(els, idxs):
     for idx in idxs:
@@ -56,10 +61,109 @@ def mergesum(dicts):
         return {k: looper(v) for k, v in shared_keys.items()}
     return looper(dicts)
 
+def binsearch(els, val):
+    # Finds the largest index of els such that els[idx] < val
+    def subroutine(start_idx, end_idx, els=els, val=val):
+        if end_idx - start_idx <= 1:
+            return start_idx
+        intermed = int((start_idx + end_idx) / 2)
+        
+        if els[intermed] <= val:
+            return subroutine(intermed, end_idx)
+        else:
+            return subroutine(start_idx, intermed)
+    idx = subroutine(0, len(els) -1)
+    next_idx = min([len(els) -1, idx + 1])
+    if els[next_idx] <= val:
+        return next_idx
+    return idx
+        
+ 
+
+def linear_interp(xlist, ylist, xval):
+    # Finds the linear interpolation of a AggregateTuple
+    assert len(xlist) == len(ylist)
+    if xval > xlist[-1]:
+        return ylist[-1]
+    if xval < xlist[0]:
+        return xlist[0]
+    
+    idx = binsearch(xlist, xval)
+    if xlist[idx] == xval:
+        return ylist[idx]
+    
+    prop = (xval - xlist[idx]) / (xlist[idx + 1] - xlist[idx])
+    return ylist[idx] + prop * (ylist[idx + 1] - ylist[idx])
+    
 
 
 ### Plotting helpers
 
-def c(i):
-    return 'bgrcmyk'[i]
 
+def c(i):
+    return list(mcolors.TABLEAU_COLORS)[i]
+    # return 'bgrcmyk'[i]
+
+def select_mean(triplist):
+    # input is a list of (xval, ymean, ystd)
+    # output is just (xval, ymean)
+    return ([_[0] for _ in triplist], [_[1] for _ in triplist])
+
+
+def plotfill_trips(triplist):
+    # input is a list of (xval, ymean, ystd)
+    # output is (xval, ymean-yst, ymean+ystd)
+    return ([_[0] for _ in triplist], 
+            [_[1] - _[2] for _ in triplist], 
+            [_[1] + _[2] for _ in triplist])
+
+#### GRAPH UTILS 
+
+def degree_hist(G):
+    pairs = {}
+    for _, d in G.degree():
+        pairs[d] = pairs.get(d, 0) + 1
+    return pairs
+
+
+# Want to do scatter plot over 'shortest path length' and 'reduction in quarantine' 
+def avg_deg(G):
+    return 2 * G.number_of_edges() / len(G)
+
+
+def get_powerlaw_exponent_cbin(G):
+    # Returns best-fit powerlaw exponent by using cumulative binning 
+    items = sorted(degree_hist(G).items(), key=lambda p:-p[0])
+    cdf = []
+    runsum = 0
+    for deg, num in items:
+        runsum += num 
+        cdf.append((deg, runsum))
+    xform = [(np.log(_[0]), np.log(_[1] / len(G))) for _ in cdf]
+    #plt.scatter(*zip(*xform))
+    slope, intercept, r_value, p_value, std_err = stats.linregress(*zip(*xform))
+    return 1 -slope
+
+
+def get_largest_cc(G):
+    ccs = nx.connected_components(G)
+    maxlen = 0
+    max_ccset = None 
+    for conn in ccs:
+        if len(conn) > maxlen:
+            maxlen = len(conn)
+            max_ccset = conn
+    return max_ccset
+
+
+def avg_shortest_path(G, samples=10 * 1000):
+    # Takes weighted average of connected component shortest paths? 
+    # Randomly samples pairs of nodes in the largest connected component and computes average path length 
+    ccset = get_largest_cc(G)
+    sampleset = random.choices(list(ccset), k=samples * 2)
+    len_sum = 0 
+    count = 0
+    for i in range(0, len(sampleset), 2):
+        len_sum += nx.shortest_path_length(G, source=sampleset[i], target=sampleset[i+1])
+        count += 1
+    return len_sum / count
