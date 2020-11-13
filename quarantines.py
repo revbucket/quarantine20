@@ -156,7 +156,6 @@ class TupleSIR:
         starts = [0] + quarantine_idxs
         ends = quarantine_idxs + [len(self.I)]
         qtine_slices = list(zip(starts, ends))
-
         slice_widths = []
         slice_heights = [] 
         # And then get max and width of each slice 
