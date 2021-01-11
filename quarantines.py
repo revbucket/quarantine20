@@ -269,7 +269,7 @@ def run_until_time(G, tau, gamma, rho, tmax):
 
 
 def run_until_prop_IR(G, tau, gamma, rho, tmax, prop, total_nodes=None,
-                      term_I=False, return_summary=True):
+                      term_I=False, final_R=None, return_summary=True):
     """
     Runs SIR model until prop (in [0,1]) fraction of nodes are in I+R states 
     If total_nodes is not None, then the proportion is WRT total_nodes (and not len(G))
@@ -293,6 +293,11 @@ def run_until_prop_IR(G, tau, gamma, rho, tmax, prop, total_nodes=None,
     kwarg = {'term_IR': threshold}    
     if term_I:
         kwarg = {'term_I': threshold}
+
+    if final_R:
+        target_final_R = total_nodes * final_R 
+        current_R = total_nodes - len(G) 
+        kwarg['term_IR'] = target_final_R - current_R 
     # This has to be slower because we need to run the infection 
     # and then figure out which time to cut things off (ex-post facto)
     try:
@@ -391,18 +396,20 @@ def quarantine_by_prop(G, tau, gamma, rho, prop_list, tmax, num_iter=1,
     init_infect = round(rho * len(G))
     new_rho = init_infect / len(G)
     cured = False
+
     for iter_num in range(num_iter):
         count = 0
         G = original_G 
         tups = [] 
         remaining_time = tmax
-        for prop in prop_list:
+        for prop_num, prop in enumerate(prop_list):
             if prop == 0:
                 continue
 
             prop_out = run_until_prop_IR(G, tau, gamma, new_rho, remaining_time, 
                                        prop, total_nodes=len(original_G),
-                                       term_I=term_I, return_summary=return_summary)
+                                       term_I=term_I,
+                                       return_summary=return_summary)
             if not return_summary:
                 G, tup = prop_out 
             else:
